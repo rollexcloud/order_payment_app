@@ -171,7 +171,9 @@ def get_menu_items():
 
 
 def generate_upi_payment_details(order_id, amount):
-    upi_string = f"upi://pay?pa={UPI_ID}&pn={PAYEE_NAME}&am={amount}&cu=INR&tn=Order_{order_id}&tr={order_id}"
+    payee_name = PAYEE_NAME.strip().replace(' ', '') if PAYEE_NAME else 'Business'
+    upi_string = f"upi://pay?pa={UPI_ID}&pn={payee_name}&am={float(amount):.2f}&cu=INR"
+
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -185,7 +187,6 @@ def generate_upi_payment_details(order_id, amount):
     buffered = BytesIO()
     img.save(buffered, format="PNG")
     qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
-    upi_deep_link = upi_string
 
     return {
         'order_id': order_id,
@@ -194,7 +195,7 @@ def generate_upi_payment_details(order_id, amount):
         'upi_id': UPI_ID,
         'payee_name': PAYEE_NAME,
         'qr_code': qr_code_base64,
-        'upi_deep_link': upi_deep_link,
+        'upi_deep_link': upi_string,
     }
 
 
