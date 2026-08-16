@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update QR Code</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Update Payment QR</h1>
+            <p>Upload your UPI QR for customer payment</p>
+        </header>
+
+        <div class="main-content">
+            <div class="form-card">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                {% if qr_exists %}
+                <div class="qr-preview-box">
+                    <img src="{{ qr_url }}" alt="Current QR Code" style="max-width: 260px; border: 1px solid #ddd; border-radius: 12px; padding: 10px; background: white;">
+                </div>
+                {% endif %}
+
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="qr_image">Choose QR Image</label>
+                        <input type="file" id="qr_image" name="qr_image" accept=".png,.jpg,.jpeg,.webp" required>
+                    </div>
+
+                    <div class="actions">
+                        <button type="submit" class="btn btn-primary">Upload QR</button>
+                        <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">Back to Orders</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

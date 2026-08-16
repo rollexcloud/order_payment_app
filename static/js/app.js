@@ -142,13 +142,12 @@ function openPaymentModal(orderData) {
     const modal = document.getElementById('paymentModal');
     const paymentAmount = document.getElementById('paymentAmount');
     const paymentStatus = document.getElementById('paymentStatus');
-    const qrCodeImage = document.getElementById('qrCodeImage');
     const payeeName = document.getElementById('payeeName');
     const orderReferenceText = document.getElementById('orderReferenceText');
 
     paymentAmount.textContent = orderData.amount;
     paymentStatus.innerHTML = '';
-    payeeName.textContent = orderData.payee_name;
+    payeeName.textContent = orderData.payee_name || 'Friend Group';
     orderReferenceText.textContent = orderData.order_ref || 'N/A';
 
     const yesRadio = document.querySelector('input[name="paymentDecision"][value="yes"]');
@@ -156,7 +155,6 @@ function openPaymentModal(orderData) {
     if (yesRadio) yesRadio.checked = true;
     if (noRadio) noRadio.checked = false;
 
-    qrCodeImage.src = 'data:image/png;base64,' + orderData.qr_code;
     window.currentOrderData = orderData;
 
     document.getElementById('transactionId').value = '';
@@ -165,18 +163,19 @@ function openPaymentModal(orderData) {
     modal.style.display = 'block';
 }
 
-// Open UPI app directly
-function openUPIApp() {
-    if (window.currentOrderData && window.currentOrderData.upi_deep_link) {
-        // Try to open UPI app
-        window.location.href = window.currentOrderData.upi_deep_link;
-        
-        // Fallback for desktop
-        setTimeout(() => {
-            // If on desktop, show QR code instead
-            alert('Please scan the QR code with your UPI app');
-        }, 2000);
+function downloadQRCode() {
+    const qrImage = document.getElementById('qrCodeImage');
+    if (!qrImage || !qrImage.src) {
+        alert('QR code is not available.');
+        return;
     }
+
+    const link = document.createElement('a');
+    link.href = qrImage.src;
+    link.download = 'upi-payment-qr.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
 }
 
 async function generateNewPaymentLink() {

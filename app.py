@@ -2,14 +2,13 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for, f
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import os
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import json
 import logging
-import qrcode
 from io import BytesIO
-import base64
 import csv
 from io import StringIO
 from sqlalchemy import inspect, text
@@ -175,35 +174,6 @@ def generate_unique_order_reference():
     return f"ORD-{now.strftime('%Y%m%d-%H%M%S-%f')}"
 
 
-def generate_upi_payment_details(order_id, amount):
-    payee_name = PAYEE_NAME.strip().replace(' ', '') if PAYEE_NAME else 'Business'
-    upi_string = f"upi://pay?pa={UPI_ID}&pn={payee_name}&am={float(amount):.2f}&cu=INR"
-
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
-        border=4,
-    )
-    qr.add_data(upi_string)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffered = BytesIO()
-    img.save(buffered, format="PNG")
-    qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
-
-    return {
-        'order_id': order_id,
-        'amount': float(amount),
-        'currency': 'INR',
-        'upi_id': UPI_ID,
-        'payee_name': PAYEE_NAME,
-        'qr_code': qr_code_base64,
-        'upi_deep_link': upi_string,
-    }
-
-
 @app.route('/')
 def index():
     menu_items = get_menu_items()
@@ -269,10 +239,15 @@ def create_order():
         db.session.add(order)
         db.session.commit()
 
-        payment_details = generate_upi_payment_details(order.id, total_amount)
-        payment_details['order_ref'] = order_ref
-        payment_details['customer_name'] = customer_name
-        return jsonify(payment_details), 200
+        return jsonify({
+            'order_id': order.id,
+            'amount': float(total_amount),
+            'currency': 'INR',
+            'payee_name': PAYEE_NAME,
+            'order_ref': order_ref,
+            'customer_name': customer_name,
+            'upi_id': UPI_ID
+        }), 200
         
     except Exception as e:
         logger.error(f"Error creating order: {str(e)}")
@@ -412,93 +387,334 @@ def delete_product(product_id):
     
     return redirect(url_for('admin_products'))
 
+@app.route('/admin/qr', methods=['GET', 'POST'])
+@login_required
+def admin_qr_settings():
+    qr_path = os.path.join(app.root_path, 'static', 'images', 'upi_qr.png')
+    qr_exists = os.path.exists(qr_path)
+
+    if request.method == 'POST':
+        file = request.files.get('qr_image')
+        if not file or file.filename == '':
+            flash('Please choose a QR image to upload.', 'error')
+            return redirect(url_for('admin_qr_settings'))
+
+        allowed_exts = {'.png', '.jpg', '.jpeg', '.webp'}
+        filename = secure_filename(file.filename)
+        ext = os.path.splitext(filename)[1].lower()
+
+        if ext not in allowed_exts:
+            flash('Only PNG, JPG, JPEG, and WEBP images are allowed.', 'error')
+            return redirect(url_for('admin_qr_settings'))
+
+        os.makedirs(os.path.dirname(qr_path), exist_ok=True)
+        file.save(qr_path)
+        flash('QR code updated successfully.', 'success')
+        return redirect(url_for('admin_qr_settings'))
+
+    return render_template('admin_qr_form.html', qr_exists=qr_exists, qr_url=url_for('static', filename='images/upi_qr.png'))
+
+
 @app.route('/admin/orders')
 @app.route('/admin/orders/')
 @login_required
 def admin_orders():
-    # Get date filters from query parameters
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
-    
-    # Build query
+    search_term = request.args.get('search_term', '').strip()
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+
+    if not start_date and not end_date:
+        start_date = today
+        end_date = today
+
     query = Order.query
-    
-    # Apply date filters if provided
+
+    if search_term:
+        query = query.filter(Order.customer_name.ilike(f'%{search_term}%'))
+
     if start_date:
         try:
             start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
             query = query.filter(Order.created_at >= start_datetime)
         except ValueError:
             pass
-    
+
     if end_date:
         try:
             end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
             query = query.filter(Order.created_at < end_datetime)
         except ValueError:
             pass
-    
+
     orders = query.order_by(Order.created_at.desc()).all()
-    
-    # Calculate statistics
+
     total_orders = len(orders)
     total_revenue = sum(order.total_amount for order in orders if order.payment_status == 'paid')
     paid_orders = len([order for order in orders if order.payment_status == 'paid'])
     pending_orders = len([order for order in orders if order.payment_status == 'pending'])
-    
+
     stats = {
         'total_orders': total_orders,
         'total_revenue': total_revenue,
         'paid_orders': paid_orders,
         'pending_orders': pending_orders
     }
-    
-    return render_template('admin_orders.html', orders=orders, stats=stats, 
-                          start_date=start_date, end_date=end_date)
 
-@app.route('/admin/orders/download')
+    return render_template('admin_orders.html', orders=orders, stats=stats,
+                          start_date=start_date, end_date=end_date,
+                          search_term=search_term)
+
+
+@app.route('/admin/orders/mark-paid', methods=['POST'])
 @login_required
-def download_orders():
-    # Get date filters from query parameters
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    # Build query
+def mark_all_paid():
+    start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
+    search_term = request.form.get('search_term', '').strip()
+
     query = Order.query
-    
-    # Apply date filters if provided
+
+    if search_term:
+        query = query.filter(Order.customer_name.ilike(f'%{search_term}%'))
+
     if start_date:
         try:
             start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
             query = query.filter(Order.created_at >= start_datetime)
         except ValueError:
             pass
-    
+
     if end_date:
         try:
             end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
             query = query.filter(Order.created_at < end_datetime)
         except ValueError:
             pass
-    
+
+    orders = query.all()
+    count = 0
+    for order in orders:
+        if order.payment_status != 'paid':
+            order.payment_status = 'paid'
+            order.updated_at = datetime.utcnow()
+            count += 1
+
+    if count:
+        db.session.commit()
+        flash(f'{count} orders marked as paid.', 'success')
+    else:
+        flash('No orders needed an update.', 'info')
+
+    return redirect(url_for('admin_orders', start_date=start_date, end_date=end_date, search_term=search_term))
+
+
+@app.route('/admin/orders/edit/<int:order_id>', methods=['GET', 'POST'])
+@login_required
+def edit_order(order_id):
+    order = Order.query.get_or_404(order_id)
+
+    if request.method == 'POST':
+        customer_name = request.form.get('customer_name', '').strip()
+        payment_status = request.form.get('payment_status', 'pending')
+        transaction_id = request.form.get('transaction_id', '').strip()
+        payment_notes = request.form.get('payment_notes', '').strip()
+
+        if len(customer_name) < 5 or not customer_name.replace(' ', '').isalpha():
+            flash('Please enter a valid full name with at least 5 letters and no numbers.', 'error')
+            return redirect(url_for('edit_order', order_id=order_id))
+
+        order.customer_name = customer_name
+        order.payment_status = payment_status
+        order.upi_transaction_id = transaction_id or order.upi_transaction_id
+        order.payment_notes = payment_notes or order.payment_notes
+        order.updated_at = datetime.utcnow()
+
+        db.session.commit()
+        flash('Order updated successfully', 'success')
+        return redirect(url_for('admin_orders'))
+
+    return render_template('admin_order_form.html', order=order)
+
+
+@app.route('/admin/orders/delete/<int:order_id>', methods=['POST'])
+@login_required
+def delete_order(order_id):
+    order = Order.query.get_or_404(order_id)
+    db.session.delete(order)
+    db.session.commit()
+    flash('Order deleted successfully', 'success')
+    return redirect(url_for('admin_orders'))
+
+@app.route('/admin/orders/report')
+@login_required
+def report_preview():
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    query = Order.query
+
+    if start_date:
+        try:
+            start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+            query = query.filter(Order.created_at >= start_datetime)
+        except ValueError:
+            pass
+
+    if end_date:
+        try:
+            end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(Order.created_at < end_datetime)
+        except ValueError:
+            pass
+
     orders = query.order_by(Order.created_at.desc()).all()
-    
-    # Create CSV
+
+    item_totals = {}
+    grand_total = 0.0
+    total_paid = 0.0
+    total_pending = 0.0
+
+    for order in orders:
+        items = json.loads(order.items) if order.items else []
+        for item in items:
+            item_name = item.get('name', 'Unknown Item')
+            quantity = int(item.get('quantity', 0) or 0)
+            price = float(item.get('price', 0) or 0)
+            line_total = price * quantity
+
+            if item_name not in item_totals:
+                item_totals[item_name] = {'quantity': 0, 'total_price': 0.0}
+
+            item_totals[item_name]['quantity'] += quantity
+            item_totals[item_name]['total_price'] += line_total
+            grand_total += line_total
+
+        if order.payment_status == 'paid':
+            total_paid += float(order.total_amount or 0)
+        elif order.payment_status == 'pending':
+            total_pending += float(order.total_amount or 0)
+
+    return render_template(
+        'admin_report.html',
+        orders=orders,
+        item_totals=item_totals,
+        grand_total=grand_total,
+        total_paid=total_paid,
+        total_pending=total_pending,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+
+@app.route('/admin/orders/confirm-status', methods=['POST'])
+@login_required
+def confirm_order_status():
+    start_date = request.form.get('start_date')
+    end_date = request.form.get('end_date')
+    updated_count = 0
+
+    for key, value in request.form.items():
+        if key.startswith('status_') and value in ['paid', 'pending']:
+            try:
+                order_id = int(key.replace('status_', ''))
+            except ValueError:
+                continue
+
+            order = Order.query.get(order_id)
+            if order:
+                order.payment_status = value
+                order.updated_at = datetime.utcnow()
+                updated_count += 1
+
+    if updated_count:
+        db.session.commit()
+        flash(f'{updated_count} order status updated successfully.', 'success')
+    else:
+        flash('No order status was changed.', 'info')
+
+    return redirect(url_for('report_preview', start_date=start_date, end_date=end_date))
+
+
+@app.route('/admin/orders/download')
+@login_required
+def download_orders():
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    query = Order.query
+
+    if start_date:
+        try:
+            start_datetime = datetime.strptime(start_date, '%Y-%m-%d')
+            query = query.filter(Order.created_at >= start_datetime)
+        except ValueError:
+            pass
+
+    if end_date:
+        try:
+            end_datetime = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(Order.created_at < end_datetime)
+        except ValueError:
+            pass
+
+    orders = query.order_by(Order.created_at.desc()).all()
+
+    item_totals = {}
+    grand_total = 0.0
+    total_paid = 0.0
+    total_pending = 0.0
+
+    for order in orders:
+        items = json.loads(order.items) if order.items else []
+        for item in items:
+            item_name = item.get('name', 'Unknown Item')
+            quantity = int(item.get('quantity', 0) or 0)
+            price = float(item.get('price', 0) or 0)
+            line_total = price * quantity
+
+            if item_name not in item_totals:
+                item_totals[item_name] = {'quantity': 0, 'total_price': 0.0}
+
+            item_totals[item_name]['quantity'] += quantity
+            item_totals[item_name]['total_price'] += line_total
+            grand_total += line_total
+
+        if order.payment_status == 'paid':
+            total_paid += float(order.total_amount or 0)
+        elif order.payment_status == 'pending':
+            total_pending += float(order.total_amount or 0)
+
     output = StringIO()
     writer = csv.writer(output)
-    
-    # Write header
-    writer.writerow([
-        'Order ID', 'Customer Name', 'Items', 'Total Amount', 
-        'Payment Status', 'UPI Transaction ID', 'Payment Notes',
-        'Created At', 'Updated At'
-    ])
-    
-    # Write data
+
+    writer.writerow(['Sales Report'])
+    writer.writerow(['Date Range', f"{start_date or 'All'} to {end_date or 'All'}"])
+    writer.writerow(['Grand Total', f"₹{grand_total:.2f}"])
+    writer.writerow(['Total Paid', f"₹{total_paid:.2f}"])
+    writer.writerow(['Total Pending', f"₹{total_pending:.2f}"])
+    writer.writerow([])
+    writer.writerow(['Item Name', 'Total Quantity', 'Total Price'])
+
+    if item_totals:
+        for item_name, totals in sorted(item_totals.items()):
+            writer.writerow([
+                item_name,
+                totals['quantity'],
+                f"₹{totals['total_price']:.2f}"
+            ])
+    else:
+        writer.writerow(['No items found', '', ''])
+
+    writer.writerow([])
+    writer.writerow(['Order ID', 'Customer Name', 'Items', 'Total Amount',
+                     'Payment Status', 'UPI Transaction ID', 'Payment Notes',
+                     'Created At', 'Updated At'])
+
     for order in orders:
         items = json.loads(order.items) if order.items else []
         items_summary = ', '.join([f"{item['name']} x{item['quantity']}" for item in items])
-        
+
         writer.writerow([
             order.id,
             order.customer_name,
@@ -510,13 +726,10 @@ def download_orders():
             order.created_at.strftime('%Y-%m-%d %H:%M:%S') if order.created_at else '',
             order.updated_at.strftime('%Y-%m-%d %H:%M:%S') if order.updated_at else ''
         ])
-    
-    # Create file
+
     output.seek(0)
-    
-    # Generate filename with date range
     filename = f"orders_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    
+
     return send_file(
         BytesIO(output.getvalue().encode('utf-8')),
         mimetype='text/csv',

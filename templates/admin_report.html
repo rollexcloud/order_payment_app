@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Report</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Sales Report</h1>
+            <div class="header-nav">
+                <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">Back to Orders</a>
+                <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download CSV</a>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="report-card">
+                <h2>Daily Sales Closing Summary</h2>
+                <p><strong>Date Range:</strong> {{ start_date or 'All' }} to {{ end_date or 'All' }}</p>
+
+                <div class="stats-container" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-info">
+                            <h3>Total Paid</h3>
+                            <p class="stat-value">₹{{ '%.2f' % total_paid }}</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏳</div>
+                        <div class="stat-info">
+                            <h3>Total Pending</h3>
+                            <p class="stat-value">₹{{ '%.2f' % total_pending }}</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">💰</div>
+                        <div class="stat-info">
+                            <h3>Grand Total</h3>
+                            <p class="stat-value">₹{{ '%.2f' % grand_total }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item Name</th>
+                            <th>Total Quantity</th>
+                            <th>Total Price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if item_totals %}
+                            {% for item_name, totals in item_totals.items()|sort %}
+                            <tr>
+                                <td>{{ item_name }}</td>
+                                <td>{{ totals['quantity'] }}</td>
+                                <td>₹{{ '%.2f' % totals['total_price'] }}</td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="3">No items found for this selection.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="report-card">
+                <h2>Final Payment Confirmation</h2>
+                <form method="POST" action="{{ url_for('confirm_order_status') }}">
+                    <input type="hidden" name="start_date" value="{{ start_date or '' }}">
+                    <input type="hidden" name="end_date" value="{{ end_date or '' }}">
+
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Order</th>
+                                <th>Customer</th>
+                                <th>Amount</th>
+                                <th>Final Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if orders %}
+                                {% for order in orders %}
+                                <tr>
+                                    <td>#{{ order.id }}</td>
+                                    <td>{{ order.customer_name }}</td>
+                                    <td>₹{{ '%.2f' % order.total_amount }}</td>
+                                    <td>
+                                        <select name="status_{{ order.id }}">
+                                            <option value="pending" {% if order.payment_status == 'pending' %}selected{% endif %}>Pending</option>
+                                            <option value="paid" {% if order.payment_status == 'paid' %}selected{% endif %}>Paid</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4">No orders found for this date range.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+
+                    {% if orders %}
+                    <div class="actions" style="margin-top: 20px;">
+                        <button type="submit" class="btn btn-primary">Confirm Final Status</button>
+                        <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download CSV</a>
+                    </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

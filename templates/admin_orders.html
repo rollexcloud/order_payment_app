@@ -65,12 +65,26 @@
                             <label for="end_date">End Date:</label>
                             <input type="date" id="end_date" name="end_date" value="{{ end_date or '' }}">
                         </div>
+                        <div class="filter-group search-group">
+                            <label for="search_term">Search Customer:</label>
+                            <input type="text" id="search_term" name="search_term" value="{{ search_term or '' }}" placeholder="Search by name">
+                        </div>
                         <div class="filter-actions">
                             <button type="submit" class="btn btn-primary">Filter</button>
                             <button type="button" class="btn btn-secondary" onclick="clearFilters()">Clear</button>
-                            <button type="button" class="btn btn-success" onclick="downloadReport()">📥 Download Report</button>
+                            <button type="button" class="btn btn-success" onclick="viewReport()">📊 View Report</button>
                         </div>
                     </form>
+
+                    <div class="bulk-actions">
+                        <form method="POST" action="{{ url_for('mark_all_paid') }}" style="display:inline;" onsubmit="return confirm('Mark all visible orders as paid?');">
+                            <input type="hidden" name="start_date" value="{{ start_date or '' }}">
+                            <input type="hidden" name="end_date" value="{{ end_date or '' }}">
+                            <input type="hidden" name="search_term" value="{{ search_term or '' }}">
+                            <button type="submit" class="btn btn-warning">✅ Mark All Visible as Paid</button>
+                        </form>
+                        <a href="{{ url_for('admin_qr_settings') }}" class="btn btn-secondary">📷 Update QR</a>
+                    </div>
                 </div>
                 
                 <h2>Orders List</h2>
@@ -102,7 +116,13 @@
                                 </td>
                                 <td>{{ order.created_at.strftime('%Y-%m-%d %H:%M') if order.created_at else 'N/A' }}</td>
                                 <td>
-                                    <a href="{{ url_for('order_details', order_id=order.id) }}" class="btn-small">View</a>
+                                    <div class="table-actions">
+                                        <a href="{{ url_for('order_details', order_id=order.id) }}" class="btn-small">View</a>
+                                        <a href="{{ url_for('edit_order', order_id=order.id) }}" class="btn-small btn-warning">Edit</a>
+                                        <form method="POST" action="{{ url_for('delete_order', order_id=order.id) }}" style="display:inline;" onsubmit="return confirm('Delete this order?');">
+                                            <button type="submit" class="btn-small btn-danger">Delete</button>
+                                        </form>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -124,25 +144,24 @@
         function clearFilters() {
             document.getElementById('start_date').value = '';
             document.getElementById('end_date').value = '';
+            document.getElementById('search_term').value = '';
             document.getElementById('filterForm').submit();
         }
 
-        function downloadReport() {
+        function viewReport() {
             const startDate = document.getElementById('start_date').value;
             const endDate = document.getElementById('end_date').value;
-            
-            // Build URL with date parameters
-            let url = '/admin/orders/download';
+
+            let url = '/admin/orders/report';
             const params = new URLSearchParams();
-            
+
             if (startDate) params.append('start_date', startDate);
             if (endDate) params.append('end_date', endDate);
-            
+
             if (params.toString()) {
                 url += '?' + params.toString();
             }
-            
-            // Trigger download
+
             window.location.href = url;
         }
     </script>
@@ -160,6 +179,35 @@
             font-size: 1.8em;
             border-bottom: 3px solid #667eea;
             padding-bottom: 10px;
+        }
+
+        .table-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .btn-warning {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #dc2626;
+            color: white;
+            border: none;
+        }
+
+        .search-group {
+            min-width: 220px;
+        }
+
+        .bulk-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 15px;
         }
 
         .header-nav {
