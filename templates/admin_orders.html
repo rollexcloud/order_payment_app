@@ -119,6 +119,9 @@
                                     <div class="table-actions">
                                         <a href="{{ url_for('order_details', order_id=order.id) }}" class="btn-small">View</a>
                                         <a href="{{ url_for('edit_order', order_id=order.id) }}" class="btn-small btn-warning">Edit</a>
+                                        <form method="POST" action="{{ url_for('mark_order_paid', order_id=order.id) }}" style="display:inline;" onsubmit="return confirm('Mark this order as paid?');">
+                                            <button type="submit" class="btn-small btn-success">Mark as Paid</button>
+                                        </form>
                                         <form method="POST" action="{{ url_for('delete_order', order_id=order.id) }}" style="display:inline;" onsubmit="return confirm('Delete this order?');">
                                             <button type="submit" class="btn-small btn-danger">Delete</button>
                                         </form>
@@ -133,9 +136,6 @@
                 <p class="empty-message">No orders found for the selected date range</p>
                 {% endif %}
                 
-                <div class="actions">
-                    <a href="/" class="btn btn-secondary">Back to Home</a>
-                </div>
             </div>
         </div>
     </div>
@@ -195,6 +195,12 @@
 
         .btn-danger {
             background: #dc2626;
+            color: white;
+            border: none;
+        }
+
+        .btn-success {
+            background: #16a34a;
             color: white;
             border: none;
         }

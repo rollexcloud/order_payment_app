@@ -65,30 +65,30 @@
         <div id="paymentModal" class="modal">
             <div class="modal-content">
                 <span class="close">&times;</span>
-                <h2>Complete Payment</h2>
+                <h2>📱 Complete Payment</h2>
                 <div class="payment-info">
-                    <p>Amount: ₹<span id="paymentAmount">0</span></p>
-                    <p>Pay using the static UPI QR code below.</p>
-                    <p class="payee-info">Paying to: <span id="payeeName"></span></p>
-                    <p>Order Ref: <strong id="orderReferenceText">-</strong></p>
+                    <p><strong>💰 Amount:</strong> ₹<span id="paymentAmount">0</span></p>
+                    <p>📲 Pay using the static UPI QR code below.</p>
+                    <p class="payee-info"><strong>👤 Paying to:</strong> <span id="payeeName"></span></p>
+                    <p><strong>🧾 Order Ref:</strong> <span id="orderReferenceText">-</span></p>
                 </div>
                 
                 <div class="qr-section">
                     <div id="qrCodeContainer">
                         <img id="qrCodeImage" src="{{ url_for('static', filename='images/upi_qr.png') }}" alt="UPI QR Code" />
                     </div>
-                    <p class="qr-instruction">Scan QR code with any UPI app</p>
+                    <p class="qr-instruction">📷 Scan this QR with any UPI app</p>
                 </div>
                 
                 <div class="upi-link-section">
-                    <p>Save the QR image below:</p>
+                    <p>💾 Save the QR image below:</p>
                     <button id="downloadQrBtn" class="btn btn-primary" onclick="downloadQRCode()">
                         ⬇ Download QR
                     </button>
                 </div>
                 
                 <div class="manual-confirm-section">
-                    <p>Did you pay the amount?</p>
+                    <p>✅ Did you pay the amount?</p>
                     <div class="payment-choice-group">
                         <label>
                             <input type="radio" name="paymentDecision" value="yes" checked>
@@ -96,11 +96,11 @@
                         </label>
                         <label>
                             <input type="radio" name="paymentDecision" value="no">
-                            No, generate a new payment link
+                            No, generate a new payment QR
                         </label>
                     </div>
 
-                    <p>After payment, enter transaction details:</p>
+                    <p>📝 After payment, enter transaction details:</p>
                     <div class="form-group">
                         <label for="transactionId">UPI Transaction ID (optional)</label>
                         <input type="text" id="transactionId" placeholder="Enter UPI transaction ID">

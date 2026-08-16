@@ -9,10 +9,12 @@ from dotenv import load_dotenv
 import json
 import logging
 from io import BytesIO
-import csv
-from io import StringIO
 from sqlalchemy import inspect, text
 from logging.handlers import RotatingFileHandler
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 # Load environment variables
 # In production, these will come from system environment variables
@@ -685,54 +687,119 @@ def download_orders():
         elif order.payment_status == 'pending':
             total_pending += float(order.total_amount or 0)
 
-    output = StringIO()
-    writer = csv.writer(output)
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
 
-    writer.writerow(['Sales Report'])
-    writer.writerow(['Date Range', f"{start_date or 'All'} to {end_date or 'All'}"])
-    writer.writerow(['Grand Total', f"₹{grand_total:.2f}"])
-    writer.writerow(['Total Paid', f"₹{total_paid:.2f}"])
-    writer.writerow(['Total Pending', f"₹{total_pending:.2f}"])
-    writer.writerow([])
-    writer.writerow(['Item Name', 'Total Quantity', 'Total Price'])
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'TitleStyle',
+        parent=styles['Title'],
+        fontName='Helvetica-Bold',
+        fontSize=20,
+        leading=24,
+        alignment=1,
+        spaceAfter=12,
+        textColor=colors.HexColor('#3b3b3b')
+    )
+    heading_style = ParagraphStyle(
+        'HeadingStyle',
+        parent=styles['Heading2'],
+        fontName='Helvetica-Bold',
+        fontSize=12,
+        leading=16,
+        textColor=colors.HexColor('#3b3b3b'),
+        spaceBefore=10,
+        spaceAfter=8,
+    )
+    normal_style = ParagraphStyle(
+        'NormalBold',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=10,
+        leading=14,
+    )
 
-    if item_totals:
-        for item_name, totals in sorted(item_totals.items()):
-            writer.writerow([
-                item_name,
-                totals['quantity'],
-                f"₹{totals['total_price']:.2f}"
-            ])
-    else:
-        writer.writerow(['No items found', '', ''])
+    date_label = f"{start_date or 'All'} to {end_date or 'All'}"
+    story = [
+        Paragraph('Daily Collection Summary', title_style),
+        Paragraph(f'Date Range: {date_label}', normal_style),
+        Spacer(1, 10),
+        Paragraph(f'Total Paid: ₹{total_paid:.2f}', normal_style),
+        Paragraph(f'Total Pending: ₹{total_pending:.2f}', normal_style),
+        Paragraph(f'Grand Total: ₹{grand_total:.2f}', normal_style),
+        Spacer(1, 16),
+        Paragraph('Item Summary', heading_style),
+    ]
 
-    writer.writerow([])
-    writer.writerow(['Order ID', 'Customer Name', 'Items', 'Total Amount',
-                     'Payment Status', 'UPI Transaction ID', 'Payment Notes',
-                     'Created At', 'Updated At'])
+    item_rows = [['Item Name', 'Qty', 'Total Price']]
+    for item_name, totals in sorted(item_totals.items()):
+        item_rows.append([
+            item_name,
+            str(totals['quantity']),
+            f"₹{totals['total_price']:.2f}"
+        ])
 
+    if not item_totals:
+        item_rows.append(['No items found', '', ''])
+
+    item_table = Table(item_rows, colWidths=[220, 70, 120])
+    item_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#667eea')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.8, colors.grey),
+        ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(item_table)
+    story.append(Spacer(1, 16))
+    story.append(Paragraph('Orders', heading_style))
+
+    order_rows = [['Order ID', 'Customer', 'Items', 'Total', 'Status']]
     for order in orders:
         items = json.loads(order.items) if order.items else []
         items_summary = ', '.join([f"{item['name']} x{item['quantity']}" for item in items])
-
-        writer.writerow([
-            order.id,
+        order_rows.append([
+            str(order.id),
             order.customer_name,
-            items_summary,
-            order.total_amount,
-            order.payment_status,
-            order.upi_transaction_id or '',
-            order.payment_notes or '',
-            order.created_at.strftime('%Y-%m-%d %H:%M:%S') if order.created_at else '',
-            order.updated_at.strftime('%Y-%m-%d %H:%M:%S') if order.updated_at else ''
+            items_summary[:40] + ('...' if len(items_summary) > 40 else ''),
+            f"₹{order.total_amount:.2f}",
+            order.payment_status.capitalize(),
         ])
 
-    output.seek(0)
-    filename = f"orders_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    order_table = Table(order_rows, colWidths=[55, 90, 200, 70, 70])
+    order_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#764ba2')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.8, colors.grey),
+        ('ALIGN', (3, 1), (-1, -1), 'CENTER'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(order_table)
+
+    doc.build(story)
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    filename = f"daily_collection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
     return send_file(
-        BytesIO(output.getvalue().encode('utf-8')),
-        mimetype='text/csv',
+        BytesIO(pdf_bytes),
+        mimetype='application/pdf',
         as_attachment=True,
         download_name=filename
     )
