@@ -521,37 +521,44 @@ with app.app_context():
         # Create tables
         db.create_all()
         print("Database tables created successfully")
-        
-        # Create default admin user if not exists (only in development)
-        if os.getenv('FLASK_ENV') != 'production':
-            admin_user = User.query.filter_by(username='admin').first()
-            if not admin_user:
-                admin_user = User(username='admin', is_admin=True)
-                admin_user.set_password('admin123')  # Default password - CHANGE IN PRODUCTION!
+
+        admin_username = os.getenv('ADMIN_USERNAME', 'admin')
+        admin_password = os.getenv('ADMIN_PASSWORD')
+        admin_user = User.query.filter_by(username=admin_username).first()
+
+        if not admin_user:
+            admin_user = User(username=admin_username, is_admin=True)
+            if admin_password:
+                admin_user.set_password(admin_password)
+                db.session.add(admin_user)
+                db.session.commit()
+                print(f"Admin user created (username: {admin_username}) from ADMIN_PASSWORD")
+            elif os.getenv('FLASK_ENV') != 'production':
+                admin_user.set_password('admin123')
                 db.session.add(admin_user)
                 db.session.commit()
                 print("Default admin user created (username: admin, password: admin123)")
                 print("IMPORTANT: Change the default admin password in production!")
-            
-            # Create sample products if none exist (only in development)
-            if Product.query.count() == 0:
-                sample_products = [
-                    Product(name='Product A', description='High quality product A', price=500),
-                    Product(name='Product B', description='Premium product B', price=1000),
-                    Product(name='Product C', description='Standard product C', price=750),
-                    Product(name='Product D', description='Deluxe product D', price=2000),
-                ]
-                for product in sample_products:
-                    db.session.add(product)
-                db.session.commit()
-                print("Sample products created successfully")
-        else:
-            # In production, just check if admin user exists
-            admin_user = User.query.filter_by(username='admin').first()
-            if not admin_user:
-                print("WARNING: No admin user found. Please create an admin user manually.")
-                print("You can do this by accessing the database directly or running a setup script.")
-            
+            else:
+                print("WARNING: No admin user found in production. Set ADMIN_USERNAME and ADMIN_PASSWORD environment variables and restart the app.")
+        elif admin_password and not admin_user.check_password(admin_password):
+            admin_user.set_password(admin_password)
+            db.session.commit()
+            print(f"Updated admin password for username: {admin_username}")
+
+        # Create sample products if none exist (only in development)
+        if os.getenv('FLASK_ENV') != 'production' and Product.query.count() == 0:
+            sample_products = [
+                Product(name='Product A', description='High quality product A', price=500),
+                Product(name='Product B', description='Premium product B', price=1000),
+                Product(name='Product C', description='Standard product C', price=750),
+                Product(name='Product D', description='Deluxe product D', price=2000),
+            ]
+            for product in sample_products:
+                db.session.add(product)
+            db.session.commit()
+            print("Sample products created successfully")
+
     except Exception as e:
         print(f"Database setup: {e}")
 
