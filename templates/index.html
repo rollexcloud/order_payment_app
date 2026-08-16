@@ -87,6 +87,18 @@
                 </div>
                 
                 <div class="manual-confirm-section">
+                    <p>Did you pay the amount?</p>
+                    <div class="payment-choice-group">
+                        <label>
+                            <input type="radio" name="paymentDecision" value="yes" checked>
+                            Yes, I paid
+                        </label>
+                        <label>
+                            <input type="radio" name="paymentDecision" value="no">
+                            No, generate a new payment link
+                        </label>
+                    </div>
+
                     <p>After payment, enter transaction details:</p>
                     <div class="form-group">
                         <label for="transactionId">UPI Transaction ID (optional)</label>

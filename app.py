@@ -169,6 +169,35 @@ def get_menu_items():
     products = Product.query.filter_by(is_active=True).all()
     return [product.to_dict() for product in products]
 
+
+def generate_upi_payment_details(order_id, amount):
+    upi_string = f"upi://pay?pa={UPI_ID}&pn={PAYEE_NAME}&am={amount}&cu=INR&tn=Order_{order_id}&tr={order_id}"
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(upi_string)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = BytesIO()
+    img.save(buffered, format="PNG")
+    qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
+    upi_deep_link = upi_string
+
+    return {
+        'order_id': order_id,
+        'amount': float(amount),
+        'currency': 'INR',
+        'upi_id': UPI_ID,
+        'payee_name': PAYEE_NAME,
+        'qr_code': qr_code_base64,
+        'upi_deep_link': upi_deep_link,
+    }
+
+
 @app.route('/')
 def index():
     menu_items = get_menu_items()
@@ -231,37 +260,8 @@ def create_order():
         db.session.add(order)
         db.session.commit()
         
-        # Generate UPI QR code
-        upi_string = f"upi://pay?pa={UPI_ID}&pn={PAYEE_NAME}&am={total_amount}&cu=INR&tn=Order_{order.id}&tr={order.id}"
-        
-        # Generate QR code
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(upi_string)
-        qr.make(fit=True)
-        
-        # Convert QR code to base64
-        img = qr.make_image(fill_color="black", back_color="white")
-        buffered = BytesIO()
-        img.save(buffered, format="PNG")
-        qr_code_base64 = base64.b64encode(buffered.getvalue()).decode()
-        
-        # Generate UPI deep link for mobile
-        upi_deep_link = f"upi://pay?pa={UPI_ID}&pn={PAYEE_NAME}&am={total_amount}&cu=INR&tn=Order_{order.id}&tr={order.id}"
-        
-        return jsonify({
-            'order_id': order.id,
-            'amount': total_amount,
-            'currency': 'INR',
-            'upi_id': UPI_ID,
-            'payee_name': PAYEE_NAME,
-            'qr_code': qr_code_base64,
-            'upi_deep_link': upi_deep_link
-        }), 200
+        payment_details = generate_upi_payment_details(order.id, total_amount)
+        return jsonify(payment_details), 200
         
     except Exception as e:
         logger.error(f"Error creating order: {str(e)}")
@@ -270,27 +270,54 @@ def create_order():
 @app.route('/confirm_payment', methods=['POST'])
 def confirm_payment():
     try:
-        data = request.get_json()
-        
-        # Update order status (manual confirmation)
-        order = Order.query.get(data['order_id'])
-        if order:
-            order.payment_status = 'paid'
-            order.upi_transaction_id = data.get('transaction_id', '')
-            order.payment_notes = data.get('notes', '')
-            order.updated_at = datetime.utcnow()
-            db.session.commit()
-            
-            return jsonify({
-                'status': 'success',
-                'order_id': order.id
-            }), 200
-        else:
+        data = request.get_json() or {}
+        order_id = data.get('order_id')
+
+        if not order_id:
+            return jsonify({'error': 'Order ID is required'}), 400
+
+        order = Order.query.get(order_id)
+        if not order:
             return jsonify({'error': 'Order not found'}), 404
-            
+
+        if order.payment_status == 'paid':
+            return jsonify({
+                'error': 'This order has already been paid and confirmed.',
+                'order_id': order.id,
+                'status': order.payment_status
+            }), 409
+
+        order.payment_status = 'paid'
+        order.upi_transaction_id = data.get('transaction_id', '')
+        order.payment_notes = data.get('notes', '')
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({
+            'status': 'success',
+            'order_id': order.id
+        }), 200
+
     except Exception as e:
+        db.session.rollback()
         logger.error(f"Error confirming payment: {str(e)}")
         return jsonify({'error': 'Failed to confirm payment'}), 500
+
+
+@app.route('/order_status/<int:order_id>', methods=['GET'])
+def order_status(order_id):
+    order = Order.query.get(order_id)
+    if not order:
+        return jsonify({'error': 'Order not found'}), 404
+
+    return jsonify({
+        'order_id': order.id,
+        'status': order.payment_status,
+        'customer_name': order.customer_name,
+        'total_amount': order.total_amount,
+        'updated_at': order.updated_at.isoformat() if order.updated_at else None,
+    }), 200
+
 
 @app.route('/order/<int:order_id>')
 def order_details(order_id):

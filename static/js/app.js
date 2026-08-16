@@ -59,32 +59,18 @@ function updateOrderSummary() {
     placeOrderBtn.disabled = false;
 }
 
-// Place order
-async function placeOrder() {
+function buildOrderPayload() {
     const customerName = document.getElementById('customer_name').value;
-    
-    // Validate form
-    if (!customerName.trim()) {
-        alert('Please enter your name');
-        return;
-    }
-    
-    if (Object.keys(cart).length === 0) {
-        alert('Please select at least one item');
-        return;
-    }
-    
-    // Gather order data
     const orderData = {
-        customer_name: document.getElementById('customer_name').value,
+        customer_name: customerName,
         items: []
     };
-    
+
     for (const [productId, quantity] of Object.entries(cart)) {
         const productCard = document.querySelector(`[data-id="${productId}"]`);
         const name = productCard.querySelector('h3').textContent;
         const price = parseFloat(productCard.dataset.price);
-        
+
         orderData.items.push({
             id: parseInt(productId),
             name: name,
@@ -92,9 +78,26 @@ async function placeOrder() {
             quantity: quantity
         });
     }
-    
+
+    return orderData;
+}
+
+async function submitOrderRequest() {
+    const customerName = document.getElementById('customer_name').value;
+
+    if (!customerName.trim()) {
+        alert('Please enter your name');
+        return false;
+    }
+
+    if (Object.keys(cart).length === 0) {
+        alert('Please select at least one item');
+        return false;
+    }
+
+    const orderData = buildOrderPayload();
+
     try {
-        // Create order
         const response = await fetch('/create_order', {
             method: 'POST',
             headers: {
@@ -102,19 +105,26 @@ async function placeOrder() {
             },
             body: JSON.stringify(orderData)
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
-            // Open payment modal
             openPaymentModal(data);
-        } else {
-            showError(data.error || 'Failed to create order');
+            return true;
         }
+
+        showError(data.error || 'Failed to create order');
+        return false;
     } catch (error) {
         console.error('Error:', error);
         showError('Failed to create order. Please try again.');
+        return false;
     }
+}
+
+// Place order
+async function placeOrder() {
+    await submitOrderRequest();
 }
 
 // Open payment modal
@@ -124,21 +134,22 @@ function openPaymentModal(orderData) {
     const paymentStatus = document.getElementById('paymentStatus');
     const qrCodeImage = document.getElementById('qrCodeImage');
     const payeeName = document.getElementById('payeeName');
-    
+
     paymentAmount.textContent = orderData.amount;
     paymentStatus.innerHTML = '';
     payeeName.textContent = orderData.payee_name;
-    
-    // Set QR code image
+
+    const yesRadio = document.querySelector('input[name="paymentDecision"][value="yes"]');
+    const noRadio = document.querySelector('input[name="paymentDecision"][value="no"]');
+    if (yesRadio) yesRadio.checked = true;
+    if (noRadio) noRadio.checked = false;
+
     qrCodeImage.src = 'data:image/png;base64,' + orderData.qr_code;
-    
-    // Store order data for later use
     window.currentOrderData = orderData;
-    
-    // Clear previous payment details
+
     document.getElementById('transactionId').value = '';
     document.getElementById('paymentNotes').value = '';
-    
+
     modal.style.display = 'block';
 }
 
@@ -156,20 +167,65 @@ function openUPIApp() {
     }
 }
 
+async function generateNewPaymentLink() {
+    const paymentStatus = document.getElementById('paymentStatus');
+    paymentStatus.innerHTML = '<p class="info">Generating a new payment link...</p>';
+
+    const customerName = document.getElementById('customer_name').value.trim();
+    if (!customerName) {
+        paymentStatus.innerHTML = '<p class="error">Please enter your name before creating a new payment link.</p>';
+        return;
+    }
+
+    if (Object.keys(cart).length === 0) {
+        paymentStatus.innerHTML = '<p class="error">Please select at least one item before retrying payment.</p>';
+        return;
+    }
+
+    const orderData = buildOrderPayload();
+
+    try {
+        const response = await fetch('/create_order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(orderData)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            openPaymentModal(data);
+            paymentStatus.innerHTML = '<p class="info">A new payment link has been generated.</p>';
+        } else {
+            paymentStatus.innerHTML = '<p class="error">' + (data.error || 'Failed to generate a new payment link') + '</p>';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        paymentStatus.innerHTML = '<p class="error">Failed to generate a new payment link.</p>';
+    }
+}
+
 // Confirm payment manually
 async function confirmPayment() {
     const transactionId = document.getElementById('transactionId').value;
     const paymentNotes = document.getElementById('paymentNotes').value;
     const paymentStatus = document.getElementById('paymentStatus');
-    
+    const paymentDecision = document.querySelector('input[name="paymentDecision"]:checked')?.value || 'yes';
+
     if (!window.currentOrderData) {
         paymentStatus.innerHTML = '<p class="error">Order data not found</p>';
         return;
     }
-    
-    // Show loading state
+
+    if (paymentDecision === 'no') {
+        await generateNewPaymentLink();
+        return;
+    }
+
     paymentStatus.innerHTML = '<p class="info">Confirming payment...</p>';
-    
+
     try {
         const response = await fetch('/confirm_payment', {
             method: 'POST',
@@ -182,9 +238,9 @@ async function confirmPayment() {
                 notes: paymentNotes
             })
         });
-        
+
         const data = await response.json();
-        
+
         if (response.ok) {
             closePaymentModal();
             showSuccess(data.order_id);
@@ -201,27 +257,27 @@ async function confirmPayment() {
 function closePaymentModal() {
     const modal = document.getElementById('paymentModal');
     modal.style.display = 'none';
+    window.currentOrderData = null;
 }
 
 // Show success modal
 function showSuccess(orderId) {
     const modal = document.getElementById('successModal');
     const successOrderId = document.getElementById('successOrderId');
-    
+
     successOrderId.textContent = orderId;
     modal.style.display = 'block';
-    
-    // Reset cart
+
     cart = {};
     document.querySelectorAll('.qty-input').forEach(input => {
         input.value = 0;
     });
     updateOrderSummary();
-    
-    // Reset form
+
     document.getElementById('customer_name').value = '';
     document.getElementById('transactionId').value = '';
     document.getElementById('paymentNotes').value = '';
+    window.currentOrderData = null;
 }
 
 // Show error modal
