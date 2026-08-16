@@ -59,8 +59,18 @@ function updateOrderSummary() {
     placeOrderBtn.disabled = false;
 }
 
+function validateCustomerName() {
+    const value = document.getElementById('customer_name').value.trim();
+    if (value.length < 5) {
+        return false;
+    }
+
+    const lettersOnly = value.replace(/\s+/g, '');
+    return lettersOnly.length >= 5 && /^[A-Za-z\s]+$/.test(value);
+}
+
 function buildOrderPayload() {
-    const customerName = document.getElementById('customer_name').value;
+    const customerName = document.getElementById('customer_name').value.trim();
     const orderData = {
         customer_name: customerName,
         items: []
@@ -83,10 +93,10 @@ function buildOrderPayload() {
 }
 
 async function submitOrderRequest() {
-    const customerName = document.getElementById('customer_name').value;
+    const customerName = document.getElementById('customer_name').value.trim();
 
-    if (!customerName.trim()) {
-        alert('Please enter your name');
+    if (!validateCustomerName()) {
+        showError('Please enter a valid full name with at least 5 letters and no numbers.');
         return false;
     }
 
@@ -134,10 +144,12 @@ function openPaymentModal(orderData) {
     const paymentStatus = document.getElementById('paymentStatus');
     const qrCodeImage = document.getElementById('qrCodeImage');
     const payeeName = document.getElementById('payeeName');
+    const orderReferenceText = document.getElementById('orderReferenceText');
 
     paymentAmount.textContent = orderData.amount;
     paymentStatus.innerHTML = '';
     payeeName.textContent = orderData.payee_name;
+    orderReferenceText.textContent = orderData.order_ref || 'N/A';
 
     const yesRadio = document.querySelector('input[name="paymentDecision"][value="yes"]');
     const noRadio = document.querySelector('input[name="paymentDecision"][value="no"]');
@@ -213,6 +225,7 @@ async function confirmPayment() {
     const paymentNotes = document.getElementById('paymentNotes').value;
     const paymentStatus = document.getElementById('paymentStatus');
     const paymentDecision = document.querySelector('input[name="paymentDecision"]:checked')?.value || 'yes';
+    const orderRef = document.getElementById('orderReferenceText').textContent;
 
     if (!window.currentOrderData) {
         paymentStatus.innerHTML = '<p class="error">Order data not found</p>';
@@ -234,8 +247,8 @@ async function confirmPayment() {
             },
             body: JSON.stringify({
                 order_id: window.currentOrderData.order_id,
-                transaction_id: transactionId,
-                notes: paymentNotes
+                transaction_id: transactionId || orderRef,
+                notes: paymentNotes || `Order Ref: ${orderRef}`
             })
         });
 
@@ -265,7 +278,7 @@ function showSuccess(orderId) {
     const modal = document.getElementById('successModal');
     const successOrderId = document.getElementById('successOrderId');
 
-    successOrderId.textContent = orderId;
+    successOrderId.textContent = document.getElementById('orderReferenceText').textContent || orderId;
     modal.style.display = 'block';
 
     cart = {};

@@ -41,7 +41,7 @@
                 <form id="orderForm">
                     <div class="form-group">
                         <label for="customer_name">Full Name *</label>
-                        <input type="text" id="customer_name" name="customer_name" required>
+                        <input type="text" id="customer_name" name="customer_name" placeholder="Enter full name (minimum 5 letters, no numbers)" required>
                     </div>
                 </form>
             </section>
@@ -56,7 +56,7 @@
                     <h3>Total: ₹<span id="totalAmount">0</span></h3>
                 </div>
                 <button id="placeOrderBtn" class="btn btn-primary" onclick="placeOrder()" disabled>
-                    Place Order & Pay
+                    Place Order
                 </button>
             </section>
         </div>
@@ -68,13 +68,14 @@
                 <h2>Complete Payment</h2>
                 <div class="payment-info">
                     <p>Amount: ₹<span id="paymentAmount">0</span></p>
-                    <p>Pay using UPI QR Code or your UPI app</p>
+                    <p>Pay using the static UPI QR code below.</p>
                     <p class="payee-info">Paying to: <span id="payeeName"></span></p>
+                    <p>Order Ref: <strong id="orderReferenceText">-</strong></p>
                 </div>
                 
                 <div class="qr-section">
                     <div id="qrCodeContainer">
-                        <img id="qrCodeImage" src="" alt="UPI QR Code" />
+                        <img id="qrCodeImage" src="{{ url_for('static', filename='images/upi_qr.png') }}" alt="UPI QR Code" />
                     </div>
                     <p class="qr-instruction">Scan QR code with any UPI app</p>
                 </div>

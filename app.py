@@ -170,6 +170,11 @@ def get_menu_items():
     return [product.to_dict() for product in products]
 
 
+def generate_unique_order_reference():
+    now = datetime.utcnow()
+    return f"ORD-{now.strftime('%Y%m%d-%H%M%S-%f')}"
+
+
 def generate_upi_payment_details(order_id, amount):
     payee_name = PAYEE_NAME.strip().replace(' ', '') if PAYEE_NAME else 'Business'
     upi_string = f"upi://pay?pa={UPI_ID}&pn={payee_name}&am={float(amount):.2f}&cu=INR"
@@ -238,30 +243,35 @@ def admin_dashboard():
 def create_order():
     try:
         data = request.get_json()
-        
-        # Validate required fields
+
         required_fields = ['customer_name', 'items']
         for field in required_fields:
             if not data.get(field):
                 return jsonify({'error': f'{field} is required'}), 400
-        
-        # Calculate total amount
+
+        customer_name = str(data['customer_name']).strip()
+        if len(customer_name) < 5 or not customer_name.replace(' ', '').isalpha():
+            return jsonify({'error': 'Please enter a valid full name with at least 5 letters and no numbers.'}), 400
+
         items = data['items']
         total_amount = sum(item['price'] * item['quantity'] for item in items)
-        
+
         if total_amount <= 0:
             return jsonify({'error': 'Invalid total amount'}), 400
-        
-        # Save order to database
+
+        order_ref = generate_unique_order_reference()
         order = Order(
-            customer_name=data['customer_name'],
+            customer_name=customer_name,
             items=json.dumps(items),
-            total_amount=total_amount
+            total_amount=total_amount,
+            payment_notes=f"Order Ref: {order_ref}"
         )
         db.session.add(order)
         db.session.commit()
-        
+
         payment_details = generate_upi_payment_details(order.id, total_amount)
+        payment_details['order_ref'] = order_ref
+        payment_details['customer_name'] = customer_name
         return jsonify(payment_details), 200
         
     except Exception as e:
