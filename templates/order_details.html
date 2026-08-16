@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Details #{{ order.id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Order Details</h1>
+        </header>
+
+        <div class="main-content">
+            <div class="order-details">
+                <h2>Order #{{ order.id }}</h2>
+                
+                <div class="detail-section">
+                    <h3>Customer Information</h3>
+                    <p><strong>Name:</strong> {{ order.customer_name }}</p>
+                </div>
+
+                <div class="detail-section">
+                    <h3>Order Items</h3>
+                    {% for item in items %}
+                    <div class="order-item-detail">
+                        <p><strong>{{ item.name }}</strong></p>
+                        <p>Quantity: {{ item.quantity }} × ₹{{ item.price }} = ₹{{ item.quantity * item.price }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="detail-section">
+                    <h3>Payment Information</h3>
+                    <p><strong>Total Amount:</strong> ₹{{ order.total_amount }}</p>
+                    <p><strong>Currency:</strong> {{ order.currency }}</p>
+                    <p><strong>Payment Status:</strong> 
+                        <span class="status {{ order.payment_status }}">{{ order.payment_status }}</span>
+                    </p>
+                    {% if order.upi_transaction_id %}
+                    <p><strong>UPI Transaction ID:</strong> {{ order.upi_transaction_id }}</p>
+                    {% endif %}
+                    {% if order.payment_notes %}
+                    <p><strong>Payment Notes:</strong> {{ order.payment_notes }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="detail-section">
+                    <h3>Order Information</h3>
+                    <p><strong>Created:</strong> {{ order.created_at.strftime('%Y-%m-%d %H:%M:%S') if order.created_at else 'N/A' }}</p>
+                    <p><strong>Last Updated:</strong> {{ order.updated_at.strftime('%Y-%m-%d %H:%M:%S') if order.updated_at else 'N/A' }}</p>
+                </div>
+
+                <div class="actions">
+                    <a href="/" class="btn btn-secondary">Back to Home</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .order-details {
+            background: #f9f9f9;
+            padding: 30px;
+            border-radius: 12px;
+        }
+
+        .detail-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .detail-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+
+        .detail-section p {
+            margin: 10px 0;
+            color: #555;
+        }
+
+        .order-item-detail {
+            background: #f5f5f5;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 6px;
+        }
+
+        .status {
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.85em;
+        }
+
+        .status.paid {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .actions {
+            margin-top: 20px;
+        }
+
+        .actions .btn {
+            width: auto;
+        }
+    </style>
+</body>
+</html>

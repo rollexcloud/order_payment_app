@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order & Pay - UPI Payment</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Order & Pay</h1>
+            <p>Select products and pay securely with UPI - No registration required!</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Product Selection -->
+            <section class="products-section">
+                <h2>Select Products</h2>
+                <div class="products-grid" id="productsGrid">
+                    {% for item in menu_items %}
+                    <div class="product-card" data-id="{{ item.id }}" data-price="{{ item.price }}">
+                        <div class="product-info">
+                            <h3>{{ item.name }}</h3>
+                            <p class="description">{{ item.description }}</p>
+                            <p class="price">₹{{ item.price }}</p>
+                        </div>
+                        <div class="quantity-control">
+                            <button class="qty-btn minus" onclick="updateQuantity({{ item.id }}, -1)">-</button>
+                            <input type="number" class="qty-input" id="qty-{{ item.id }}" value="0" min="0" readonly>
+                            <button class="qty-btn plus" onclick="updateQuantity({{ item.id }}, 1)">+</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- Customer Details Form -->
+            <section class="customer-section">
+                <h2>Customer Details</h2>
+                <form id="orderForm">
+                    <div class="form-group">
+                        <label for="customer_name">Full Name *</label>
+                        <input type="text" id="customer_name" name="customer_name" required>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Order Summary -->
+            <section class="summary-section">
+                <h2>Order Summary</h2>
+                <div id="orderSummary">
+                    <p class="empty-message">No items selected</p>
+                </div>
+                <div class="total-section">
+                    <h3>Total: ₹<span id="totalAmount">0</span></h3>
+                </div>
+                <button id="placeOrderBtn" class="btn btn-primary" onclick="placeOrder()" disabled>
+                    Place Order & Pay
+                </button>
+            </section>
+        </div>
+
+        <!-- Payment Modal -->
+        <div id="paymentModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Complete Payment</h2>
+                <div class="payment-info">
+                    <p>Amount: ₹<span id="paymentAmount">0</span></p>
+                    <p>Pay using UPI QR Code or your UPI app</p>
+                    <p class="payee-info">Paying to: <span id="payeeName"></span></p>
+                </div>
+                
+                <div class="qr-section">
+                    <div id="qrCodeContainer">
+                        <img id="qrCodeImage" src="" alt="UPI QR Code" />
+                    </div>
+                    <p class="qr-instruction">Scan QR code with any UPI app</p>
+                </div>
+                
+                <div class="upi-link-section">
+                    <p>Or pay directly with your UPI app:</p>
+                    <button id="upiAppBtn" class="btn btn-primary" onclick="openUPIApp()">
+                        📱 Open UPI App
+                    </button>
+                </div>
+                
+                <div class="manual-confirm-section">
+                    <p>After payment, enter transaction details:</p>
+                    <div class="form-group">
+                        <label for="transactionId">UPI Transaction ID (optional)</label>
+                        <input type="text" id="transactionId" placeholder="Enter UPI transaction ID">
+                    </div>
+                    <div class="form-group">
+                        <label for="paymentNotes">Notes (optional)</label>
+                        <textarea id="paymentNotes" rows="2" placeholder="Any additional notes"></textarea>
+                    </div>
+                    <button id="confirmPaymentBtn" class="btn btn-success" onclick="confirmPayment()">
+                        ✓ Confirm Payment
+                    </button>
+                </div>
+                
+                <div id="paymentStatus" class="payment-status"></div>
+            </div>
+        </div>
+
+        <!-- Success Modal -->
+        <div id="successModal" class="modal">
+            <div class="modal-content success">
+                <span class="close">&times;</span>
+                <div class="success-icon">✓</div>
+                <h2>Order Placed Successfully!</h2>
+                <p>Your order has been placed and payment received.</p>
+                <p>Order ID: <span id="successOrderId"></span></p>
+                <button class="btn btn-secondary" onclick="window.location.href='/'">Place Another Order</button>
+            </div>
+        </div>
+
+        <!-- Error Modal -->
+        <div id="errorModal" class="modal">
+            <div class="modal-content error">
+                <span class="close">&times;</span>
+                <div class="error-icon">✕</div>
+                <h2>Payment Failed</h2>
+                <p id="errorMessage">Something went wrong. Please try again.</p>
+                <button class="btn btn-secondary" onclick="closeErrorModal()">Try Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
