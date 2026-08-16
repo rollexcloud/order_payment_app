@@ -12,7 +12,7 @@
             <h1>Sales Report</h1>
             <div class="header-nav">
                 <a href="{{ url_for('admin_orders') }}" class="btn btn-secondary">Back to Orders</a>
-                <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download CSV</a>
+                <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download PDF</a>
             </div>
         </header>
 
@@ -112,7 +112,7 @@
                     {% if orders %}
                     <div class="actions" style="margin-top: 20px;">
                         <button type="submit" class="btn btn-primary">Confirm Final Status</button>
-                        <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download CSV</a>
+                        <a href="{{ url_for('download_orders', start_date=start_date, end_date=end_date) }}" class="btn btn-success">Download PDF</a>
                     </div>
                     {% endif %}
                 </form>

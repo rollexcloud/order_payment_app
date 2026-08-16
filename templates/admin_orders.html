@@ -77,7 +77,7 @@
                     </form>
 
                     <div class="bulk-actions">
-                        <form method="POST" action="{{ url_for('mark_all_paid') }}" style="display:inline;" onsubmit="return confirm('Mark all visible orders as paid?');">
+                        <form id="bulkMarkPaidForm" method="POST" action="{{ url_for('mark_all_paid') }}" onsubmit="return submitBulkMarkPaid(event);">
                             <input type="hidden" name="start_date" value="{{ start_date or '' }}">
                             <input type="hidden" name="end_date" value="{{ end_date or '' }}">
                             <input type="hidden" name="search_term" value="{{ search_term or '' }}">
@@ -104,7 +104,7 @@
                         </thead>
                         <tbody>
                             {% for order in orders %}
-                            <tr>
+                            <tr data-order-id="{{ order.id }}">
                                 <td>#{{ order.id }}</td>
                                 <td>{{ order.customer_name }}</td>
                                 <td>₹{{ order.total_amount }}</td>
@@ -119,10 +119,10 @@
                                     <div class="table-actions">
                                         <a href="{{ url_for('order_details', order_id=order.id) }}" class="btn-small">View</a>
                                         <a href="{{ url_for('edit_order', order_id=order.id) }}" class="btn-small btn-warning">Edit</a>
-                                        <form method="POST" action="{{ url_for('mark_order_paid', order_id=order.id) }}" style="display:inline;" onsubmit="return confirm('Mark this order as paid?');">
+                                        <form class="inline-action-form" method="POST" action="{{ url_for('mark_order_paid', order_id=order.id) }}" onsubmit="return submitSingleMarkPaid(event, {{ order.id }});">
                                             <button type="submit" class="btn-small btn-success">Mark as Paid</button>
                                         </form>
-                                        <form method="POST" action="{{ url_for('delete_order', order_id=order.id) }}" style="display:inline;" onsubmit="return confirm('Delete this order?');">
+                                        <form class="inline-action-form" method="POST" action="{{ url_for('delete_order', order_id=order.id) }}" onsubmit="return submitDeleteOrder(event, {{ order.id }});">
                                             <button type="submit" class="btn-small btn-danger">Delete</button>
                                         </form>
                                     </div>
@@ -163,6 +163,136 @@
             }
 
             window.location.href = url;
+        }
+
+        function submitSingleMarkPaid(event, orderId) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button');
+            if (!button) return false;
+
+            if (!confirm('Mark this order as paid?')) {
+                return false;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Updating...';
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const row = document.querySelector(`tr[data-order-id="${orderId}"]`);
+                    if (row) {
+                        const statusCell = row.querySelector('.status');
+                        if (statusCell) {
+                            statusCell.textContent = 'paid';
+                            statusCell.className = 'status paid';
+                        }
+                    }
+                    alert(data.message);
+                } else {
+                    alert(data.message || 'Unable to update order');
+                }
+            })
+            .catch(() => {
+                alert('Something went wrong while updating the order');
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.textContent = 'Mark as Paid';
+            });
+
+            return false;
+        }
+
+        function submitDeleteOrder(event, orderId) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button');
+            if (!button) return false;
+
+            if (!confirm('Delete this order?')) {
+                return false;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Deleting...';
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const row = document.querySelector(`tr[data-order-id="${orderId}"]`);
+                    if (row) row.remove();
+                    alert(data.message);
+                } else {
+                    alert(data.message || 'Unable to delete order');
+                }
+            })
+            .catch(() => {
+                alert('Something went wrong while deleting the order');
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.textContent = 'Delete';
+            });
+
+            return false;
+        }
+
+        function submitBulkMarkPaid(event) {
+            event.preventDefault();
+            const form = event.target;
+            const button = form.querySelector('button');
+            if (!button) return false;
+
+            if (!confirm('Mark all visible orders as paid?')) {
+                return false;
+            }
+
+            button.disabled = true;
+            button.textContent = 'Updating...';
+
+            const formData = new FormData(form);
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.querySelectorAll('.status.pending').forEach(el => {
+                        el.textContent = 'paid';
+                        el.className = 'status paid';
+                    });
+                    alert(data.message);
+                } else {
+                    alert(data.message || 'Unable to update orders');
+                }
+            })
+            .catch(() => {
+                alert('Something went wrong while updating orders');
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.textContent = '✅ Mark All Visible as Paid';
+            });
+
+            return false;
         }
     </script>
 

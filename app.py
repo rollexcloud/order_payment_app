@@ -292,21 +292,6 @@ def confirm_payment():
         return jsonify({'error': 'Failed to confirm payment'}), 500
 
 
-@app.route('/order_status/<int:order_id>', methods=['GET'])
-def order_status(order_id):
-    order = Order.query.get(order_id)
-    if not order:
-        return jsonify({'error': 'Order not found'}), 404
-
-    return jsonify({
-        'order_id': order.id,
-        'status': order.payment_status,
-        'customer_name': order.customer_name,
-        'total_amount': order.total_amount,
-        'updated_at': order.updated_at.isoformat() if order.updated_at else None,
-    }), 200
-
-
 @app.route('/order/<int:order_id>')
 def order_details(order_id):
     order = Order.query.get_or_404(order_id)
@@ -383,10 +368,16 @@ def delete_product(product_id):
     try:
         db.session.delete(product)
         db.session.commit()
-        flash('Product deleted successfully', 'success')
+        message = 'Product deleted successfully'
+        status = 'success'
     except Exception as e:
-        flash(f'Error deleting product: {str(e)}', 'error')
-    
+        message = f'Error deleting product: {str(e)}'
+        status = 'error'
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': status == 'success', 'message': message, 'product_id': product_id})
+
+    flash(message, 'success' if status == 'success' else 'error')
     return redirect(url_for('admin_products'))
 
 @app.route('/admin/qr', methods=['GET', 'POST'])
@@ -508,7 +499,36 @@ def mark_all_paid():
     else:
         flash('No orders needed an update.', 'info')
 
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            'success': True,
+            'message': f'{count} orders marked as paid.' if count else 'No orders needed an update.',
+            'count': count,
+            'redirect_url': url_for('admin_orders', start_date=start_date, end_date=end_date, search_term=search_term),
+        })
+
     return redirect(url_for('admin_orders', start_date=start_date, end_date=end_date, search_term=search_term))
+
+
+@app.route('/admin/orders/mark-paid/<int:order_id>', methods=['POST'])
+@login_required
+def mark_order_paid(order_id):
+    order = Order.query.get_or_404(order_id)
+    if order.payment_status != 'paid':
+        order.payment_status = 'paid'
+        order.updated_at = datetime.utcnow()
+        db.session.commit()
+        message = f'Order #{order.id} marked as paid.'
+        success = True
+    else:
+        message = f'Order #{order.id} is already marked as paid.'
+        success = False
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': success, 'message': message, 'order_id': order_id})
+
+    flash(message, 'success' if success else 'info')
+    return redirect(url_for('admin_orders'))
 
 
 @app.route('/admin/orders/edit/<int:order_id>', methods=['GET', 'POST'])
@@ -545,6 +565,10 @@ def delete_order(order_id):
     order = Order.query.get_or_404(order_id)
     db.session.delete(order)
     db.session.commit()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'success': True, 'message': 'Order deleted successfully', 'order_id': order_id})
+
     flash('Order deleted successfully', 'success')
     return redirect(url_for('admin_orders'))
 
